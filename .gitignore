@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+app-front/dist/
+app-front/android/.gradle/
+app-front/android/app/build/
