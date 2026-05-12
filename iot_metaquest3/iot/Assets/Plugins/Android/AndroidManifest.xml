@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+  <application android:usesCleartextTraffic="true">
+    <activity
+        android:name="com.unity3d.player.UnityPlayerGameActivity"
+        android:theme="@style/BaseUnityGameActivityTheme"
+        tools:node="merge">
+      <intent-filter tools:node="merge">
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+        <category android:name="com.oculus.intent.category.VR" />
+      </intent-filter>
+      <meta-data android:name="unityplayer.UnityActivity" android:value="true" tools:node="merge" />
+      <meta-data android:name="android.app.lib_name" android:value="game" tools:node="merge" />
+      <meta-data android:name="com.oculus.vr.focusaware" android:value="true" tools:node="merge" />
+    </activity>
+  </application>
+</manifest>

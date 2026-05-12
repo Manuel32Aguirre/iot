@@ -1,0 +1,2 @@
+C:\Users\vic-s\Desktop\iot\iot_metaquest3\iot\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\CMakeLists.txt
+C:\Users\vic-s\Desktop\iot\iot_metaquest3\iot\Library\Bee\Android\Prj\IL2CPP\Gradle\unityLibrary\src\main\cpp\GameActivity\CMakeLists.txt

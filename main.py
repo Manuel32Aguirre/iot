@@ -28,11 +28,15 @@ MODE_SWITCH_PIN = 25
 STATUS_LED_PIN = 23
 LED_ACTIVE_HIGH = True
 
-GAS_ALERT_THRESHOLD = 80.0
+GAS_ALERT_THRESHOLD = 50.0
 FIRE_TEMPERATURE_THRESHOLD = 58.0
-SAMPLE_INTERVAL_MS = 3000
+SAMPLE_INTERVAL_MS = 500
 WIFI_CONNECT_TIMEOUT_MS = 15000
 WIFI_RETRY_INTERVAL_MS = 5000
+DISCOVERY_INTERVAL_MS = 10000
+DISCOVERY_TIMEOUT_MS = 2000
+DISCOVERY_PORT = 8266
+DISCOVERY_MESSAGE = b"CASA_SEGURA_DISCOVER"
 CONFIG_BLINK_MS = 900
 CONNECTING_BLINK_MS = 220
 AP_PASSWORD = "CasaSeguraIoT"
@@ -42,7 +46,7 @@ HTTP_PORT = 80
 DEFAULT_CONFIG = {
     "wifi_ssid": "",
     "wifi_password": "",
-    "backend_base_url": "http://192.168.0.29:8080",
+    "backend_base_url": "",
     "device_code": "esp32-001",
     "device_name": "ESP32 Sala",
 }
@@ -158,18 +162,6 @@ PORTAL_HTML = """<!doctype html>
             Contrasena WiFi
             <input id="wifiPassword" name="wifiPassword" maxlength="64" type="password" placeholder="********" />
           </label>
-          <label>
-            URL backend Spring
-            <input id="backendBaseUrl" name="backendBaseUrl" maxlength="120" placeholder="http://192.168.0.29:8080" value="__BACKEND_URL__" />
-          </label>
-          <label>
-            Codigo del dispositivo
-            <input id="deviceCode" name="deviceCode" maxlength="40" placeholder="esp32-001" value="__DEVICE_CODE__" />
-          </label>
-          <label>
-            Nombre del dispositivo
-            <input id="deviceName" name="deviceName" maxlength="60" placeholder="ESP32 Sala" value="__DEVICE_NAME__" />
-          </label>
         </div>
         <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
           <button type="submit">Guardar configuracion</button>
@@ -210,9 +202,6 @@ PORTAL_HTML = """<!doctype html>
       const payload = {
         wifi_ssid: document.getElementById('wifiSsid').value.trim(),
         wifi_password: document.getElementById('wifiPassword').value,
-        backend_base_url: document.getElementById('backendBaseUrl').value.trim(),
-        device_code: document.getElementById('deviceCode').value.trim(),
-        device_name: document.getElementById('deviceName').value.trim(),
       };
 
       try {
@@ -340,11 +329,14 @@ def parse_config_payload(payload):
     config.update(load_config())
     config["wifi_ssid"] = str(payload.get("wifi_ssid", "")).strip()
     config["wifi_password"] = str(payload.get("wifi_password", ""))
-    config["backend_base_url"] = str(payload.get("backend_base_url", "")).strip().rstrip("/")
-    config["device_code"] = str(payload.get("device_code", "")).strip().lower()
-    config["device_name"] = str(payload.get("device_name", "")).strip()
+    if payload.get("backend_base_url") is not None:
+        config["backend_base_url"] = str(payload.get("backend_base_url", "")).strip().rstrip("/")
+    if payload.get("device_code") is not None:
+        config["device_code"] = str(payload.get("device_code", "")).strip().lower()
+    if payload.get("device_name") is not None:
+        config["device_name"] = str(payload.get("device_name", "")).strip()
 
-    required = ["wifi_ssid", "backend_base_url", "device_code", "device_name"]
+    required = ["wifi_ssid", "device_code", "device_name"]
     missing = [field for field in required if not config[field]]
     if missing:
         raise ValueError("Faltan campos: {}".format(", ".join(missing)))
@@ -353,6 +345,7 @@ def parse_config_payload(payload):
 
 def configure_sensor_suite():
     i2c = machine.I2C(0, scl=machine.Pin(I2C_SCL_PIN), sda=machine.Pin(I2C_SDA_PIN))
+    print("I2C detectado:", i2c.scan())
     gas_sensor = machine.ADC(machine.Pin(GAS_SENSOR_PIN))
     gas_sensor.atten(machine.ADC.ATTN_11DB)
     return {
@@ -362,6 +355,37 @@ def configure_sensor_suite():
     }
 
 
+def discover_backend_base_url(station):
+    if station is None or not station.isconnected():
+        return None
+
+    discovery_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        discovery_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        discovery_socket.settimeout(DISCOVERY_TIMEOUT_MS / 1000)
+        discovery_socket.sendto(DISCOVERY_MESSAGE, ("255.255.255.255", DISCOVERY_PORT))
+        payload, address = discovery_socket.recvfrom(128)
+        text = payload.decode().strip()
+        if not text.startswith("IOT_BACKEND "):
+            return None
+        port = text.split(" ", 1)[1].strip()
+        return "http://{}:{}".format(address[0], port)
+    except Exception:
+        return None
+    finally:
+        discovery_socket.close()
+
+
+def maybe_refresh_backend_base_url(config, station):
+    discovered_url = discover_backend_base_url(station)
+    if not discovered_url or discovered_url == config.get("backend_base_url"):
+        return config, False
+
+    config["backend_base_url"] = discovered_url
+    save_config(config)
+    return config, True
+
+
 def controlar_ventilador(estado):
     if estado:
         machine.Pin(FAN_PIN, machine.Pin.OUT, value=0)
@@ -369,14 +393,14 @@ def controlar_ventilador(estado):
         machine.Pin(FAN_PIN, machine.Pin.IN)
 
 
-def read_snapshot(sensors, sample_number, wifi_connected, wifi_ip):
+def read_snapshot(sensors, sample_number, wifi_connected, wifi_ip, fan_override=None):
     temperature = round(sensors["sensor_aht"].temperature, 2)
     humidity = round(sensors["sensor_aht"].relative_humidity, 2)
     pressure = round(sensors["sensor_bmp"].get_pressure() / 100.0, 2)
     gas_level = round((sensors["gas_sensor"].read() / 4095) * 100, 2)
     gas_alert = gas_level >= GAS_ALERT_THRESHOLD
     fire_alert = temperature >= FIRE_TEMPERATURE_THRESHOLD
-    relay_on = gas_alert or fire_alert
+    relay_on = gas_alert or fire_alert or bool(fan_override)
     controlar_ventilador(relay_on)
     return {
         "sampleNumber": sample_number,
@@ -416,7 +440,11 @@ def print_snapshot(snapshot):
 def start_access_point():
     access_point = network.WLAN(network.AP_IF)
     access_point.active(True)
-    access_point.config(essid=ap_ssid(), password=AP_PASSWORD)
+    access_point.config(
+        essid=ap_ssid(),
+        password=AP_PASSWORD,
+        authmode=getattr(network, "AUTH_WPA_WPA2_PSK", 4),
+    )
     access_point.ifconfig((AP_IP, "255.255.255.0", AP_IP, "8.8.8.8"))
     return access_point
 
@@ -444,7 +472,10 @@ def stop_station(station):
 
 def maybe_post_reading(config, snapshot):
     if urequests is None:
-        return "Sin urequests, no se envio a backend."
+        return "Sin urequests, no se envio a backend.", None, False
+
+    if not config.get("backend_base_url"):
+        return "Backend aun no descubierto.", None, False
 
     ingest_url = "{}/api/device/readings".format(config["backend_base_url"])
     payload = {
@@ -465,9 +496,17 @@ def maybe_post_reading(config, snapshot):
             data=json.dumps(payload),
             headers={"Content-Type": "application/json"},
         )
-        return "POST {} -> {}".format(ingest_url, response.status_code)
+        desired_fan_state = None
+        if response.content:
+            try:
+                response_payload = response.json()
+                desired_fan_state = response_payload.get("fanOverrideEnabled")
+            except Exception:
+                desired_fan_state = None
+        success = 200 <= response.status_code < 300
+        return "POST {} -> {}".format(ingest_url, response.status_code), desired_fan_state, success
     except Exception as error:
-        return "Error enviando lectura: {}".format(error)
+        return "Error enviando lectura: {}".format(error), None, False
     finally:
         if response is not None:
             response.close()
@@ -515,7 +554,7 @@ def handle_http_request(client_socket, access_point):
                     200,
                     {
                         "mode": "config" if switch_in_config_mode() else "operation",
-                        "hasConfig": bool(config.get("wifi_ssid") and config.get("backend_base_url")),
+                        "hasConfig": bool(config.get("wifi_ssid")),
                         "apSsid": ap_ssid(),
                         "apIp": access_point.ifconfig()[0],
                     },
@@ -554,20 +593,23 @@ def main():
 
     led_pin = configure_led()
     set_led(led_pin, False)
-    sensors = configure_sensor_suite()
+    sensors = None
 
     access_point = None
     config_server = None
-    station = ensure_station()
+    station = None
     current_mode = None
     wifi_connect_started_at = None
     last_wifi_retry_at = 0
     led_on = False
     last_led_toggle_at = time.ticks_ms()
     last_sample_at = 0
+    last_discovery_attempt_at = 0
     sample_number = 0
+    fan_override = None
 
     while True:
+        config = load_config()
         config_mode = switch_in_config_mode()
         mode = "config" if config_mode else "operation"
 
@@ -576,8 +618,9 @@ def main():
             if mode == "config":
                 print("Switch en CONFIGURACION. AP activo y portal listo para Meta Quest.")
                 stop_station(station)
-                station = ensure_station()
-                stop_station(station)
+                station = None
+                sensors = None
+                fan_override = None
                 access_point = start_access_point()
                 if config_server is None:
                     config_server = socket.socket()
@@ -596,8 +639,14 @@ def main():
                 stop_access_point(access_point)
                 access_point = None
                 station = ensure_station()
+                try:
+                    sensors = configure_sensor_suite()
+                except Exception as error:
+                    sensors = None
+                    print("No se pudieron inicializar sensores:", error)
                 wifi_connect_started_at = None
                 last_wifi_retry_at = 0
+                last_discovery_attempt_at = 0
 
         blink_period = CONFIG_BLINK_MS if current_mode == "config" else CONNECTING_BLINK_MS
         wifi_connected = False
@@ -621,14 +670,20 @@ def main():
                         client_socket.close()
 
         else:
-            config = load_config()
-            ready_for_operation = bool(config.get("wifi_ssid") and config.get("backend_base_url"))
+            if sensors is None:
+                try:
+                    sensors = configure_sensor_suite()
+                except Exception as error:
+                    print("Sensores no disponibles, reintentando:", error)
+                    time.sleep_ms(1000)
+                    continue
+            ready_for_operation = bool(config.get("wifi_ssid"))
             if not ready_for_operation:
                 if time.ticks_diff(time.ticks_ms(), last_led_toggle_at) >= CONNECTING_BLINK_MS:
                     led_on = not led_on
                     set_led(led_pin, led_on)
                     last_led_toggle_at = time.ticks_ms()
-                print("No hay configuracion guardada. Mueve el switch a modo configuracion para capturar WiFi.")
+                print("No hay WiFi configurada. Mueve el switch a modo configuracion para capturar WiFi.")
                 time.sleep_ms(800)
                 continue
 
@@ -658,17 +713,47 @@ def main():
                 led_on = True
                 wifi_connect_started_at = None
 
-        if time.ticks_diff(time.ticks_ms(), last_sample_at) >= SAMPLE_INTERVAL_MS:
+                if (
+                    not config.get("backend_base_url")
+                    or time.ticks_diff(time.ticks_ms(), last_discovery_attempt_at) >= DISCOVERY_INTERVAL_MS
+                ):
+                    config, updated = maybe_refresh_backend_base_url(config, station)
+                    last_discovery_attempt_at = time.ticks_ms()
+                    if updated:
+                        print("Backend descubierto automaticamente en {}".format(config["backend_base_url"]))
+
+        if (
+            current_mode == "operation"
+            and sensors is not None
+            and time.ticks_diff(time.ticks_ms(), last_sample_at) >= SAMPLE_INTERVAL_MS
+        ):
             sample_number += 1
-            if current_mode == "operation" and station.isconnected():
+            if station is not None and station.isconnected():
                 wifi_connected = True
                 wifi_ip = station.ifconfig()[0]
-            snapshot = read_snapshot(sensors, sample_number, wifi_connected, wifi_ip)
+            snapshot = read_snapshot(sensors, sample_number, wifi_connected, wifi_ip, fan_override)
             print_snapshot(snapshot)
 
-            if current_mode == "operation" and station.isconnected():
-                result = maybe_post_reading(load_config(), snapshot)
+            if station is not None and station.isconnected():
+                config = load_config()
+                if (
+                    not config.get("backend_base_url")
+                    or time.ticks_diff(time.ticks_ms(), last_discovery_attempt_at) >= DISCOVERY_INTERVAL_MS
+                ):
+                    config, updated = maybe_refresh_backend_base_url(config, station)
+                    last_discovery_attempt_at = time.ticks_ms()
+                    if updated:
+                        print("Backend descubierto automaticamente en {}".format(config["backend_base_url"]))
+
+                result, next_fan_override, success = maybe_post_reading(config, snapshot)
                 print(result)
+                if next_fan_override is not None:
+                    fan_override = bool(next_fan_override)
+                if not success:
+                    config, updated = maybe_refresh_backend_base_url(config, station)
+                    last_discovery_attempt_at = time.ticks_ms()
+                    if updated:
+                        print("Backend redescubierto en {}".format(config["backend_base_url"]))
 
             last_sample_at = time.ticks_ms()
 
