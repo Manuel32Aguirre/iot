@@ -1,30 +1,64 @@
+# Secrets and local environment
 .env
+.env.*
+
+# Python caches and virtual environments
 __pycache__/
 *.pyc
-app-front/dist/
-app-front/android/.gradle/
-app-front/android/app/build/
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
 
-/[Uu]nity_metaquest3/iot/[Ll]ibrary/
-iot_metaquest3/iot/Library/
-/[Uu]nity_metaquest3/iot/[Tt]emp/
-/[Uu]nity_metaquest3/iot/[Oo]bj/
-/[Uu]nity_metaquest3/iot/[Bb]uild/
-/[Uu]nity_metaquest3/iot/[Ll]ogs/
-/[Uu]nity_metaquest3/iot/[Uu]ser[Ss]ettings/
-/[Uu]nity_metaquest3/iot/.utmp/
+# Java / Maven build output
+**/target/
 
-# Archivos de solución y VS Code
+# Editor settings
 .vscode/
-*.csproj
-*.sln
-*.userprefs
+.vs/
+.idea/
+*.iml
 
-# Binarios y carpetas de depuración vistas en la imagen
-/[Uu]nity_metaquest3/iot/*.apk
-/[Uu]nity_metaquest3/iot/apk1_BackUpThisFolder_ButDontShipIt*/
-/[Uu]nity_metaquest3/iot/iot_BurstDebugInformation_DoNotShip/
+# Unity generated folders
+/iot_metaquest3/iot/[Ll]ibrary/
+/iot_metaquest3/iot/[Tt]emp/
+/iot_metaquest3/iot/[Oo]bj/
+/iot_metaquest3/iot/[Bb]uild/
+/iot_metaquest3/iot/[Bb]uilds/
+/iot_metaquest3/iot/[Ll]ogs/
+/iot_metaquest3/iot/[Uu]ser[Ss]ettings/
+/iot_metaquest3/iot/[Mm]emoryCaptures/
+/iot_metaquest3/iot/[Rr]ecordings/
+/iot_metaquest3/iot/.utmp/
+/iot_metaquest3/iot/.gradle/
+/iot_metaquest3/iot/ExportedObj/
 
-# Archivos del sistema
+# Unity generated solution and IDE files
+/iot_metaquest3/iot/*.csproj
+/iot_metaquest3/iot/*.sln
+/iot_metaquest3/iot/*.userprefs
+/iot_metaquest3/iot/*.pidb
+/iot_metaquest3/iot/*.booproj
+/iot_metaquest3/iot/*.svd
+/iot_metaquest3/iot/*.pdb
+/iot_metaquest3/iot/*.mdb
+/iot_metaquest3/iot/*.opendb
+/iot_metaquest3/iot/*.VC.db
+/iot_metaquest3/iot/*.suo
+/iot_metaquest3/iot/*.tmp
+/iot_metaquest3/iot/*.user
+/iot_metaquest3/iot/*.userosscache
+
+# Unity and Android build artifacts
+/iot_metaquest3/iot/*.apk
+/iot_metaquest3/iot/*.aab
+/iot_metaquest3/iot/*_BackUpThisFolder_ButDontShipItWithYourGame/
+/iot_metaquest3/iot/*_BurstDebugInformation_DoNotShip/
+/iot_metaquest3/iot/sysinfo.txt
+
+# OS files
 .DS_Store
 Thumbs.db

@@ -1,30 +1,44 @@
-.env
-__pycache__/
-*.pyc
-app-front/dist/
-app-front/android/.gradle/
-app-front/android/app/build/
-
-/[Uu]nity_metaquest3/iot/[Ll]ibrary/
-iot_metaquest3/iot/Library/
-/[Uu]nity_metaquest3/iot/[Tt]emp/
-/[Uu]nity_metaquest3/iot/[Oo]bj/
-/[Uu]nity_metaquest3/iot/[Bb]uild/
-/[Uu]nity_metaquest3/iot/[Ll]ogs/
-/[Uu]nity_metaquest3/iot/[Uu]ser[Ss]ettings/
-/[Uu]nity_metaquest3/iot/.utmp/
-
-# Archivos de solución y VS Code
+# Editor settings
 .vscode/
+.vs/
+
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+.utmp/
+.gradle/
+ExportedObj/
+
+# Unity generated solution and IDE files
 *.csproj
 *.sln
 *.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+*.suo
+*.tmp
+*.user
+*.userosscache
 
-# Binarios y carpetas de depuración vistas en la imagen
-/[Uu]nity_metaquest3/iot/*.apk
-/[Uu]nity_metaquest3/iot/apk1_BackUpThisFolder_ButDontShipIt*/
-/[Uu]nity_metaquest3/iot/iot_BurstDebugInformation_DoNotShip/
+# Unity and Android build artifacts
+*.apk
+*.aab
+*_BackUpThisFolder_ButDontShipItWithYourGame/
+*_BurstDebugInformation_DoNotShip/
+sysinfo.txt
 
-# Archivos del sistema
+# OS files
 .DS_Store
 Thumbs.db

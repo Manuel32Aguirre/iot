@@ -1,19 +1,25 @@
 # Casa Segura IoT
 
-Proyecto local para monitoreo de humo y ambiente con tres piezas:
+Proyecto local para monitoreo ambiental y control de ventilacion con tres piezas principales:
 
-- `iot-humo/`: API Spring Boot con usuarios, JWT, provision de dispositivos, dashboard y stream SSE.
-- `app-front/`: app Angular preparada para Capacitor/Android con login, registro, dashboard en tiempo real y provision del ESP32.
-- `main.py`: firmware MicroPython para ESP32 con modo AP de configuracion, conexion WiFi y envio de lecturas al backend.
+- `main.py`: firmware MicroPython para ESP32 con sensores por I2C, lectura de gas por ADC, modo AP de configuracion y envio de lecturas al backend.
+- `iot/`: API Spring Boot con registro y login basicos, ingesta de telemetria, consulta de dashboard, override manual del ventilador y descubrimiento LAN por UDP.
+- `iot_metaquest3/iot/`: proyecto Unity para Meta Quest 3 que descubre el backend en la red local, consulta telemetria y permite controlar el ventilador.
+
+## Estructura del repositorio
+
+- `main.py`, `ahtx0.py`, `bmp280.py`: firmware y drivers MicroPython.
+- `docker-compose.yml`: servicio local de PostgreSQL.
+- `iot/`: backend Java con Spring Boot y Maven.
+- `iot_metaquest3/iot/`: cliente Unity para Meta Quest 3.
+- `ESP32_UPLOADS.md`: archivos que debes copiar al ESP32.
 
 ## Variables locales
 
-El archivo `.env` en la raiz centraliza las variables sensibles del backend y de PostgreSQL.
+El archivo `.env` en la raiz centraliza la configuracion sensible del backend y de PostgreSQL.
 
 - `APP_PORT`: puerto del backend Spring.
-- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER`: conexion JDBC local.
-- `JWT_SECRET`: firma para tokens de usuarios y dispositivos.
-- `ALERT_GAS_THRESHOLD`, `ALERT_FIRE_TEMPERATURE_THRESHOLD`: umbrales de alerta.
+- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DRIVER`: conexion JDBC local a PostgreSQL.
 
 ## Levantar PostgreSQL
 
@@ -26,74 +32,42 @@ docker compose up -d postgres
 ## Levantar backend Spring
 
 ```powershell
-cd iot-humo
+cd iot
 .\mvnw.cmd spring-boot:run
 ```
 
-Puntos principales del backend:
+Swagger queda disponible en `http://TU_IP_LOCAL:8080/swagger-ui.html`.
+
+### Endpoints principales
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
-- `GET /api/dashboard`
-- `GET /api/dashboard/stream?token=...`
-- `POST /api/devices/provisioning-token`
+- `GET /api/device/readings`
+- `GET /api/dashboard?deviceCode=...`
 - `POST /api/device/readings`
+- `POST /api/device/fan`
+- `GET /api/device/fan?deviceCode=...`
 
-Swagger queda disponible en `http://TU_IP_LOCAL:8080/swagger-ui/index.html`.
+## Firmware del ESP32
 
-## Levantar Angular
+1. Carga `main.py`, `bmp280.py` y `ahtx0.py` en el ESP32.
+2. Si tu firmware MicroPython no incluye `urequests`, sube tambien `urequests.py`.
+3. El switch conectado a `MODE_SWITCH_PIN` define el modo de trabajo:
+	- configuracion: levanta un AP `CasaSegura-XXXXXX` con clave `CasaSeguraIoT`
+	- operacion: se conecta a la red WiFi, descubre el backend en la LAN y envia lecturas
+4. En modo configuracion, abre `http://192.168.4.1/` desde el navegador del Quest, un telefono o una laptop para guardar el SSID y la contrasena del WiFi.
+5. En modo operacion, el ESP32 intenta descubrir automaticamente el backend por UDP en el puerto `8266`.
+6. Cuando encuentra el backend, envia lecturas JSON a `POST /api/device/readings`.
+7. El intervalo de muestreo actual es de `500 ms`.
 
-```powershell
-cd app-front
-npm install
-npm start
-```
+## Proyecto Meta Quest 3
 
-La app te deja definir en runtime:
-
-- URL local de la API Spring, por ejemplo `http://192.168.1.10:8080`
-- URL del ESP32 en modo configuracion, por defecto `http://192.168.4.1`
-- Un boton para probar si la API local responde antes de intentar registrarte
-
-## Flujo del ESP32
-
-1. Carga `bmp280.py` y `main.py` en el ESP32 junto con tus dependencias MicroPython (`ahtx0.py`, `urequests.py` si tu firmware no la trae).
-2. Si el ESP32 no tiene configuracion WiFi, ahora seguira monitoreando por consola como antes.
-3. Si quieres entrar al modo de provision, reinicialo manteniendo presionado el boton `BOOT`.
-4. En ese modo levantara un AP llamado `CasaSegura-XXXXXX` con clave `CasaSeguraIoT`.
-5. Mientras el telefono siga en tu WiFi de casa, entra a la app y genera el token del dispositivo desde el dashboard.
-6. Luego conecta el telefono a ese AP del ESP32.
-7. Desde la app manda SSID, contrasena WiFi, `deviceCode` y el endpoint de ingesta usando el token generado en el paso anterior.
-8. El ESP32 reiniciara, se conectara a tu router y comenzara a enviar una lectura cada 30 segundos por defecto.
-
-## Generar Android APK
-
-La app ya incluye Capacitor. Si es la primera vez, ejecuta:
-
-```powershell
-cd app-front
-npm install
-npx cap add android
-```
-
-Luego, para cada build:
-
-```powershell
-cd app-front
-npm run build:mobile
-npx cap sync android
-npx cap open android
-```
-
-En Android Studio:
-
-1. Espera a que Gradle sincronice.
-2. Concede permiso de notificaciones para alertas de gas/incendio.
-3. Usa `Build > Build Bundle(s) / APK(s) > Build APK(s)` para generar el APK debug.
-4. Si quieres release, firma la app desde `Build > Generate Signed Bundle / APK`.
+- Abre `iot_metaquest3/iot/` con Unity `6000.2.8f1`.
+- El runtime principal esta en `Assets/Scripts/IotQuestRuntime.cs`.
+- La app descubre el backend por UDP, consulta `GET /api/device/readings` y permite enviar overrides a `POST /api/device/fan`.
+- El APK de pruebas que existe en el repo local es `iot_metaquest3/iot/apk1.apk`, pero no debe versionarse.
 
 ## Validaciones hechas
 
-- Backend: `mvnw test` exitoso en `iot-humo/`.
-- Frontend: `npm run build` exitoso en `app-front/`.
-- Firmware: sin errores de sintaxis detectados por el editor en `main.py`.
+- Backend: `.\mvnw.cmd test` exitoso en `iot/`.
+- Firmware: sin errores de sintaxis reportados por el editor en `main.py`.
